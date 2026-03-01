@@ -1,97 +1,92 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
 from time import perf_counter
 
-from data_pages import PagePreview, PagedDataSet
-from hash_index import IndexSearchResult
+from data_pages import preview_page
 
 
-@dataclass(frozen=True)
-class TableScanResult:
-    query: str
-    found: bool
-    page_number: int | None
-    pages_read: int
-    records_read: int
-    elapsed_seconds: float
-    visited_pages_preview: tuple[int, ...]
-    preview_truncated: bool
-    page_preview: PagePreview | None
-
-
-@dataclass(frozen=True)
-class SearchComparison:
-    same_query: bool
-    query: str
-    time_saved_seconds: float
-    page_reads_saved: int
-
-
-def format_seconds(seconds: float) -> str:
+def format_seconds(seconds):
+    # Converte segundos para milissegundos so para ficar mais facil de ler na tela.
     return f"{seconds * 1000:.3f} ms"
 
 
-def table_scan(dataset: PagedDataSet, query: str, preview_limit: int = 20) -> TableScanResult:
-    started_at = perf_counter()
+def table_scan(dataset, query, preview_limit=20):
+    # Le pagina por pagina ate encontrar a palavra.
+    #
+    # Diferenca para a busca por indice:
+    # aqui nao usamos hash nem bucket.
+    # O programa simplesmente vai lendo na ordem: pagina 1, pagina 2, pagina 3...
+    start_time = perf_counter()
+
     pages_read = 0
     records_read = 0
-    visited_pages: list[int] = []
+    visited_pages = []
     preview_truncated = False
     found = False
-    page_number: int | None = None
-    page_preview: PagePreview | None = None
+    page_number = None
+    page_result = None
 
-    for current_page, page in dataset.iter_pages():
+    # Este contador existe so porque as paginas na interface comecam em 1.
+    current_page_number = 1
+
+    for page in dataset["pages"]:
         pages_read += 1
+
+        # Guardamos so uma amostra das paginas visitadas para a tela nao ficar gigante.
         if len(visited_pages) < preview_limit:
-            visited_pages.append(current_page)
+            visited_pages.append(current_page_number)
         else:
             preview_truncated = True
 
+        # Aqui a busca eh registro por registro.
         for word in page:
             records_read += 1
+
             if word == query:
                 found = True
-                page_number = current_page
-                page_preview = dataset.preview(current_page)
+                page_number = current_page_number
+                page_result = preview_page(dataset, current_page_number)
                 break
 
         if found:
             break
 
-    elapsed = perf_counter() - started_at
+        current_page_number += 1
 
-    return TableScanResult(
-        query=query,
-        found=found,
-        page_number=page_number,
-        pages_read=pages_read,
-        records_read=records_read,
-        elapsed_seconds=elapsed,
-        visited_pages_preview=tuple(visited_pages),
-        preview_truncated=preview_truncated,
-        page_preview=page_preview,
-    )
+    # Tempo gasto no table scan.
+    search_time = perf_counter() - start_time
+
+    return {
+        "query": query,
+        "found": found,
+        "page_number": page_number,
+        "pages_read": pages_read,
+        "records_read": records_read,
+        "elapsed_seconds": search_time,
+        "visited_pages_preview": visited_pages,
+        "preview_truncated": preview_truncated,
+        "page_preview": page_result,
+    }
 
 
-def compare_searches(
-    index_result: IndexSearchResult | None, scan_result: TableScanResult | None
-) -> SearchComparison | None:
+def compare_searches(index_result, scan_result):
+    # Compara o resultado da busca por indice com o table scan.
     if index_result is None or scan_result is None:
         return None
 
-    if index_result.query != scan_result.query:
-        return SearchComparison(
-            same_query=False,
-            query=index_result.query,
-            time_saved_seconds=0.0,
-            page_reads_saved=0,
-        )
+    if index_result["query"] != scan_result["query"]:
+        # Se as palavras forem diferentes, nao faz sentido comparar.
+        return {
+            "same_query": False,
+            "query": index_result["query"],
+            "time_saved_seconds": 0.0,
+            "page_reads_saved": 0,
+        }
 
-    return SearchComparison(
-        same_query=True,
-        query=index_result.query,
-        time_saved_seconds=scan_result.elapsed_seconds - index_result.elapsed_seconds,
-        page_reads_saved=scan_result.pages_read - index_result.total_page_reads,
-    )
+    # Se a palavra for a mesma, mostramos:
+    # - diferenca de tempo
+    # - diferenca de custo em leituras
+    return {
+        "same_query": True,
+        "query": index_result["query"],
+        "time_saved_seconds": scan_result["elapsed_seconds"] - index_result["elapsed_seconds"],
+        "page_reads_saved": scan_result["pages_read"] - index_result["total_page_reads"],
+    }

@@ -1,83 +1,87 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterator, Sequence
+import os
 
 
-@dataclass(frozen=True)
-class PagePreview:
-    page_number: int
-    record_count: int
-    first_records: tuple[str, ...]
+def load_words_from_txt(file_path):
+    # Esta funcao abre o arquivo .txt e devolve uma lista de palavras.
+    # Cada linha do arquivo vira um registro.
+    if not os.path.exists(file_path):
+        raise FileNotFoundError("Arquivo nao encontrado: " + str(file_path))
 
+    words = []
 
-def load_words_from_txt(file_path: str | Path) -> list[str]:
-    path = Path(file_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Arquivo nao encontrado: {path}")
-
-    records: list[str] = []
-    with path.open("r", encoding="utf-8", errors="ignore") as handle:
-        for raw_line in handle:
+    # "errors=ignore" evita que o programa pare se alguma linha tiver
+    # caractere estranho no arquivo.
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as file_handle:
+        for raw_line in file_handle:
+            # strip() remove espacos e a quebra de linha do final.
             word = raw_line.strip()
+
+            # So adicionamos linhas que realmente tenham conteudo.
             if word:
-                records.append(word)
-    return records
+                words.append(word)
+
+    if len(words) == 0:
+        raise ValueError("O arquivo esta vazio ou nao possui palavras validas.")
+
+    return words
 
 
-class PagedDataSet:
-    def __init__(self, records: Sequence[str], page_size: int) -> None:
-        if page_size <= 0:
-            raise ValueError("O tamanho da pagina deve ser maior que zero.")
+def create_dataset(records, page_size):
+    # Esta funcao cria a estrutura principal dos dados.
+    # Em vez de usar classe, usamos um dicionario simples.
+    #
+    # O dicionario final guarda:
+    # - "records": lista completa de palavras
+    # - "pages": lista de paginas
+    # - "page_size": quantos registros cabem em cada pagina
+    # - "nr": numero total de registros
+    # - "page_count": numero total de paginas
+    if page_size <= 0:
+        raise ValueError("O tamanho da pagina deve ser maior que zero.")
 
-        self.records = records if isinstance(records, list) else list(records)
-        self.page_size = page_size
+    pages = []
+    all_records = list(records)
+    start = 0
 
-    @property
-    def nr(self) -> int:
-        return len(self.records)
+    # Quebra a lista grande em paginas menores.
+    # Exemplo:
+    # se page_size = 3, a lista vira blocos de 3 em 3.
+    while start < len(all_records):
+        end = start + page_size
+        pages.append(all_records[start:end])
+        start = end
 
-    @property
-    def page_count(self) -> int:
-        if self.nr == 0:
-            return 0
-        return ((self.nr - 1) // self.page_size) + 1
+    return {
+        "records": all_records,
+        "pages": pages,
+        "page_size": page_size,
+        "nr": len(all_records),
+        "page_count": len(pages),
+    }
 
-    def page_of_record(self, record_index: int) -> int:
-        if record_index < 0 or record_index >= self.nr:
-            raise IndexError("Indice de registro fora do intervalo.")
-        return (record_index // self.page_size) + 1
 
-    def get_page(self, page_number: int) -> list[str]:
-        if self.page_count == 0:
-            return []
-        if page_number < 1 or page_number > self.page_count:
-            raise IndexError("Numero de pagina fora do intervalo.")
-        start = (page_number - 1) * self.page_size
-        end = min(start + self.page_size, self.nr)
-        return list(self.records[start:end])
+def get_page(dataset, page_number):
+    # Na tela a pagina comeca em 1.
+    # Mas na lista do Python a primeira posicao eh 0.
+    # Por isso usamos page_number - 1.
+    if page_number < 1 or page_number > dataset["page_count"]:
+        raise IndexError("Numero de pagina fora do intervalo.")
 
-    def preview(self, page_number: int, preview_limit: int = 5) -> PagePreview:
-        page = self.get_page(page_number)
-        return PagePreview(
-            page_number=page_number,
-            record_count=len(page),
-            first_records=tuple(page[:preview_limit]),
-        )
+    return list(dataset["pages"][page_number - 1])
 
-    def first_preview(self, preview_limit: int = 5) -> PagePreview | None:
-        if self.page_count == 0:
-            return None
-        return self.preview(1, preview_limit)
 
-    def last_preview(self, preview_limit: int = 5) -> PagePreview | None:
-        if self.page_count == 0:
-            return None
-        return self.preview(self.page_count, preview_limit)
+def preview_page(dataset, page_number, preview_limit=5):
+    # Esta funcao monta um pequeno resumo da pagina.
+    # Ela existe so para a interface nao tentar mostrar tudo.
+    #
+    # O resumo mostra:
+    # - numero da pagina
+    # - quantos registros ela tem
+    # - os primeiros registros da pagina
+    page = get_page(dataset, page_number)
 
-    def iter_pages(self) -> Iterator[tuple[int, list[str]]]:
-        for start in range(0, self.nr, self.page_size):
-            page_number = (start // self.page_size) + 1
-            end = min(start + self.page_size, self.nr)
-            yield page_number, list(self.records[start:end])
+    return {
+        "page_number": page_number,
+        "record_count": len(page),
+        "first_records": list(page[:preview_limit]),
+    }

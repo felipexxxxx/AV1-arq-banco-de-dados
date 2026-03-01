@@ -1,292 +1,305 @@
-from __future__ import annotations
-
-import math
-from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Callable
 
-from data_pages import PagePreview, PagedDataSet
+from data_pages import get_page, preview_page
 
-
-HashFunction = Callable[[str, int], int]
 
 FNV1A_NAME = "FNV-1a"
 POLYNOMIAL_NAME = "Polinomial"
 
 
-@dataclass(frozen=True)
-class IndexEntry:
-    key: str
-    page_number: int
+def available_hash_algorithms():
+    # A interface usa esta lista para preencher o campo de escolha de hash.
+    return [FNV1A_NAME, POLYNOMIAL_NAME]
 
 
-@dataclass(frozen=True)
-class BucketSnapshot:
-    bucket_index: int
-    primary_entries: tuple[IndexEntry, ...]
-    overflow_pages: tuple[tuple[IndexEntry, ...], ...]
-    total_entries: int
+def fnv1a_hash(word, bucket_count):
+    # Esta eh uma hash deterministica.
+    # "Deterministica" significa:
+    # a mesma palavra sempre cai no mesmo bucket.
+    #
+    # No final, ela sempre devolve um numero entre 0 e bucket_count - 1.
+    value = 2166136261
+
+    # A palavra eh lida byte por byte.
+    # Cada byte altera o valor final.
+    for byte in word.encode("utf-8"):
+        value = value ^ byte
+        value = (value * 16777619) & 0xFFFFFFFF
+
+    # O operador % limita o resultado ao intervalo valido de buckets.
+    return value % bucket_count
 
 
-@dataclass(frozen=True)
-class BuildStats:
-    record_count: int
-    page_count: int
-    bucket_count: int
-    bucket_capacity: int
-    collision_count: int
-    overflow_bucket_count: int
-    overflow_page_count: int
-    build_seconds: float
+def polynomial_hash(word, bucket_count):
+    # Outra hash simples e deterministica.
+    # Em vez de trabalhar com bytes, ela trabalha letra por letra.
+    value = 0
 
-    @property
-    def collision_rate(self) -> float:
-        if self.record_count == 0:
-            return 0.0
-        return (self.collision_count / self.record_count) * 100.0
+    # ord(char) transforma a letra em numero.
+    for char in word:
+        value = (value * 53 + ord(char)) % 2147483647
 
-    @property
-    def overflow_rate(self) -> float:
-        if self.bucket_count == 0:
-            return 0.0
-        return (self.overflow_bucket_count / self.bucket_count) * 100.0
+    return value % bucket_count
 
 
-@dataclass(frozen=True)
-class IndexSearchResult:
-    query: str
-    found: bool
-    page_number: int | None
-    bucket_index: int
-    bucket_pages_read: int
-    data_pages_read: int
-    total_page_reads: int
-    bucket_entries_examined: int
-    elapsed_seconds: float
-    bucket_snapshot: BucketSnapshot
-    page_preview: PagePreview | None
-
-
-@dataclass
-class OverflowPage:
-    entries: list[IndexEntry] = field(default_factory=list)
-    next_page: OverflowPage | None = None
-
-
-@dataclass
-class Bucket:
-    entries: list[IndexEntry] = field(default_factory=list)
-    overflow_head: OverflowPage | None = None
-    overflow_pages: int = 0
-
-    def snapshot(self, bucket_index: int) -> BucketSnapshot:
-        overflow_pages: list[tuple[IndexEntry, ...]] = []
-        current = self.overflow_head
-        total_entries = len(self.entries)
-
-        while current is not None:
-            overflow_pages.append(tuple(current.entries))
-            total_entries += len(current.entries)
-            current = current.next_page
-
-        return BucketSnapshot(
-            bucket_index=bucket_index,
-            primary_entries=tuple(self.entries),
-            overflow_pages=tuple(overflow_pages),
-            total_entries=total_entries,
-        )
-
-
-def available_hash_algorithms() -> tuple[str, ...]:
-    return (FNV1A_NAME, POLYNOMIAL_NAME)
-
-
-def resolve_hash_function(name: str) -> HashFunction:
-    if name == POLYNOMIAL_NAME:
-        return polynomial_hash
-    return fnv1a_hash
-
-
-def fnv1a_hash(value: str, bucket_count: int) -> int:
-    hash_value = 2166136261
-    for byte in value.encode("utf-8"):
-        hash_value ^= byte
-        hash_value = (hash_value * 16777619) & 0xFFFFFFFF
-    return hash_value % bucket_count
-
-
-def polynomial_hash(value: str, bucket_count: int) -> int:
-    accumulator = 0
-    modulus = 2_147_483_647
-    base = 53
-    for char in value:
-        accumulator = (accumulator * base + ord(char)) % modulus
-    return accumulator % bucket_count
-
-
-def calculate_bucket_count(record_count: int, bucket_capacity: int) -> int:
+def calculate_bucket_count(record_count, bucket_capacity):
+    # Regra do trabalho:
+    # NB > NR / FR
+    #
+    # A forma mais simples de garantir isso eh:
+    # NB = (NR // FR) + 1
     if bucket_capacity <= 0:
         raise ValueError("FR deve ser maior que zero.")
-    minimum = math.floor(record_count / bucket_capacity) + 1
-    return next_prime(max(1, minimum))
+
+    return (record_count // bucket_capacity) + 1
 
 
-def validate_bucket_count(bucket_count: int, record_count: int, bucket_capacity: int) -> bool:
-    return bucket_count > (record_count / bucket_capacity) if bucket_capacity > 0 else False
-
-
-def next_prime(value: int) -> int:
-    candidate = max(2, value)
-    while not is_prime(candidate):
-        candidate += 1
-    return candidate
-
-
-def is_prime(value: int) -> bool:
-    if value <= 1:
-        return False
-    if value <= 3:
-        return True
-    if value % 2 == 0:
+def validate_bucket_count(bucket_count, record_count, bucket_capacity):
+    # Esta funcao apenas confere se o NB calculado respeita a regra.
+    if bucket_capacity <= 0:
         return False
 
-    limit = math.isqrt(value)
-    for factor in range(3, limit + 1, 2):
-        if value % factor == 0:
-            return False
-    return True
+    return bucket_count > (record_count / bucket_capacity)
 
 
-class HashIndex:
-    def __init__(self, bucket_capacity: int, bucket_count: int, hash_algorithm: str = FNV1A_NAME) -> None:
-        if bucket_capacity <= 0:
-            raise ValueError("FR deve ser maior que zero.")
-        if bucket_count <= 0:
-            raise ValueError("NB deve ser maior que zero.")
+def create_hash_index(bucket_capacity, bucket_count, hash_algorithm=FNV1A_NAME):
+    # Esta funcao cria o indice vazio.
+    #
+    # Estrutura usada:
+    # - o indice todo eh um dicionario
+    # - dentro dele existe uma lista de buckets
+    # - cada bucket tem:
+    #   - "primary": area principal
+    #   - "overflow": paginas extras
+    if bucket_capacity <= 0:
+        raise ValueError("FR deve ser maior que zero.")
 
-        self.bucket_capacity = bucket_capacity
-        self.bucket_count = bucket_count
-        self.hash_algorithm = hash_algorithm
-        self._hash_function = resolve_hash_function(hash_algorithm)
+    if bucket_count <= 0:
+        raise ValueError("NB deve ser maior que zero.")
 
-        self.buckets: list[Bucket] = [Bucket() for _ in range(bucket_count)]
-        self.collision_count = 0
-        self.overflow_pages_created = 0
-        self._overflow_buckets: set[int] = set()
+    if hash_algorithm == POLYNOMIAL_NAME:
+        hash_function = polynomial_hash
+    else:
+        hash_function = fnv1a_hash
 
-    @property
-    def overflow_bucket_count(self) -> int:
-        return len(self._overflow_buckets)
-
-    def build(self, dataset: PagedDataSet) -> BuildStats:
-        self.buckets = [Bucket() for _ in range(self.bucket_count)]
-        self.collision_count = 0
-        self.overflow_pages_created = 0
-        self._overflow_buckets.clear()
-
-        started_at = perf_counter()
-        for page_number, page in dataset.iter_pages():
-            for word in page:
-                self.insert(word, page_number)
-        elapsed = perf_counter() - started_at
-
-        return BuildStats(
-            record_count=dataset.nr,
-            page_count=dataset.page_count,
-            bucket_count=self.bucket_count,
-            bucket_capacity=self.bucket_capacity,
-            collision_count=self.collision_count,
-            overflow_bucket_count=self.overflow_bucket_count,
-            overflow_page_count=self.overflow_pages_created,
-            build_seconds=elapsed,
+    # Aqui criamos todos os buckets vazios.
+    buckets = []
+    i = 0
+    while i < bucket_count:
+        buckets.append(
+            {
+                "primary": [],
+                "overflow": [],
+            }
         )
+        i += 1
 
-    def insert(self, key: str, page_number: int) -> None:
-        bucket_index = self._bucket_index_for(key)
-        bucket = self.buckets[bucket_index]
-        entry = IndexEntry(key=key, page_number=page_number)
+    return {
+        "bucket_capacity": bucket_capacity,
+        "bucket_count": bucket_count,
+        "hash_algorithm": hash_algorithm,
+        "hash_function": hash_function,
+        "buckets": buckets,
+        "collision_count": 0,
+        "overflow_pages_created": 0,
+        "overflow_bucket_indexes": [],
+    }
 
-        if len(bucket.entries) < self.bucket_capacity:
-            bucket.entries.append(entry)
-            return
 
-        self.collision_count += 1
-        self._overflow_buckets.add(bucket_index)
+def build_index(index, dataset):
+    # Esta funcao monta o indice completo.
+    #
+    # Ela percorre:
+    # 1. cada pagina
+    # 2. cada palavra da pagina
+    # 3. calcula o bucket pela hash
+    # 4. guarda (palavra -> numero_da_pagina)
+    #
+    # Se o bucket principal lotar, entra em overflow.
 
-        if bucket.overflow_head is None:
-            bucket.overflow_head = OverflowPage()
-            bucket.overflow_pages += 1
-            self.overflow_pages_created += 1
+    # Primeiro, limpamos o indice para reconstruir tudo do zero.
+    buckets = []
+    i = 0
+    while i < index["bucket_count"]:
+        buckets.append(
+            {
+                "primary": [],
+                "overflow": [],
+            }
+        )
+        i += 1
 
-        current = bucket.overflow_head
-        while current is not None:
-            if len(current.entries) < self.bucket_capacity:
-                current.entries.append(entry)
-                return
+    index["buckets"] = buckets
+    index["collision_count"] = 0
+    index["overflow_pages_created"] = 0
+    index["overflow_bucket_indexes"] = []
 
-            if current.next_page is None:
-                current.next_page = OverflowPage()
-                bucket.overflow_pages += 1
-                self.overflow_pages_created += 1
+    start_time = perf_counter()
 
-            current = current.next_page
+    # page_number comeca em 1 porque a interface mostra paginas assim.
+    page_number = 1
+    for page in dataset["pages"]:
+        for word in page:
+            # A hash diz qual bucket essa palavra deve usar.
+            bucket_number = index["hash_function"](word, index["bucket_count"])
+            bucket = index["buckets"][bucket_number]
 
-    def search(self, key: str, dataset: PagedDataSet) -> IndexSearchResult:
-        bucket_index = self._bucket_index_for(key)
-        bucket = self.buckets[bucket_index]
+            # O indice guarda:
+            # - a chave (palavra)
+            # - a pagina onde a palavra esta
+            item = {
+                "key": word,
+                "page_number": page_number,
+            }
 
-        started_at = perf_counter()
-        bucket_pages_read = 1
-        entries_examined = 0
-        matched_page_number: int | None = None
+            # Se ainda cabe no bucket principal, colocamos ali.
+            if len(bucket["primary"]) < index["bucket_capacity"]:
+                bucket["primary"].append(item)
+            else:
+                # So contamos colisao quando o bucket principal ja esta cheio.
+                index["collision_count"] += 1
 
-        for entry in bucket.entries:
-            entries_examined += 1
-            if entry.key == key:
-                matched_page_number = entry.page_number
-                break
+                # Guardamos o numero do bucket que entrou em overflow.
+                # Isso eh usado depois para calcular a taxa de overflow.
+                if bucket_number not in index["overflow_bucket_indexes"]:
+                    index["overflow_bucket_indexes"].append(bucket_number)
 
-        overflow_page = bucket.overflow_head
-        while matched_page_number is None and overflow_page is not None:
+                # Se ainda nao existe overflow, criamos a primeira pagina extra.
+                if len(bucket["overflow"]) == 0:
+                    bucket["overflow"].append([])
+                    index["overflow_pages_created"] += 1
+
+                # Pegamos a ultima pagina de overflow criada.
+                last_page = bucket["overflow"][-1]
+
+                # Se essa ultima pagina ja lotou, criamos outra.
+                if len(last_page) >= index["bucket_capacity"]:
+                    bucket["overflow"].append([])
+                    index["overflow_pages_created"] += 1
+                    last_page = bucket["overflow"][-1]
+
+                # Finalmente colocamos a palavra na ultima pagina de overflow.
+                last_page.append(item)
+
+        page_number += 1
+
+    # Medimos o tempo total da construcao do indice.
+    build_time = perf_counter() - start_time
+
+    if dataset["nr"] == 0:
+        collision_rate = 0.0
+    else:
+        # Taxa de colisao = colisoes / total de registros.
+        collision_rate = (index["collision_count"] / dataset["nr"]) * 100.0
+
+    if index["bucket_count"] == 0:
+        overflow_rate = 0.0
+    else:
+        # Taxa de overflow = buckets com overflow / total de buckets.
+        overflow_rate = (len(index["overflow_bucket_indexes"]) / index["bucket_count"]) * 100.0
+
+    return {
+        "record_count": dataset["nr"],
+        "page_count": dataset["page_count"],
+        "bucket_count": index["bucket_count"],
+        "bucket_capacity": index["bucket_capacity"],
+        "collision_count": index["collision_count"],
+        "overflow_bucket_count": len(index["overflow_bucket_indexes"]),
+        "overflow_page_count": index["overflow_pages_created"],
+        "build_seconds": build_time,
+        "collision_rate": collision_rate,
+        "overflow_rate": overflow_rate,
+    }
+
+
+def search_in_index(index, word, dataset):
+    # Esta funcao faz a busca pelo indice.
+    #
+    # Passos:
+    # 1. aplica a hash na palavra
+    # 2. vai ao bucket calculado
+    # 3. procura no bucket principal
+    # 4. se precisar, procura no overflow
+    # 5. pega a pagina encontrada
+    # 6. le a pagina para confirmar a palavra
+    bucket_number = index["hash_function"](word, index["bucket_count"])
+    bucket = index["buckets"][bucket_number]
+
+    start_time = perf_counter()
+
+    # Sempre lemos pelo menos 1 estrutura do indice:
+    # o bucket principal.
+    bucket_pages_read = 1
+
+    # Conta quantas entradas foram comparadas.
+    entries_checked = 0
+
+    # Aqui vamos guardar a pagina encontrada no indice.
+    page_number = None
+
+    # Primeiro, olhamos o bucket principal.
+    for item in bucket["primary"]:
+        entries_checked += 1
+        if item["key"] == word:
+            page_number = item["page_number"]
+            break
+
+    # Se nao achou no principal, percorremos as paginas de overflow.
+    if page_number is None:
+        for overflow_page in bucket["overflow"]:
+            # Cada pagina de overflow visitada conta como mais uma leitura.
             bucket_pages_read += 1
-            for entry in overflow_page.entries:
-                entries_examined += 1
-                if entry.key == key:
-                    matched_page_number = entry.page_number
+
+            for item in overflow_page:
+                entries_checked += 1
+                if item["key"] == word:
+                    page_number = item["page_number"]
                     break
-            if matched_page_number is not None:
+
+            if page_number is not None:
                 break
-            overflow_page = overflow_page.next_page
 
-        data_pages_read = 0
-        found = False
-        page_preview: PagePreview | None = None
+    data_pages_read = 0
+    found = False
+    page_result = None
 
-        if matched_page_number is not None:
-            data_pages_read = 1
-            page = dataset.get_page(matched_page_number)
-            if key in page:
-                found = True
-                page_preview = dataset.preview(matched_page_number)
+    # Se o indice apontou uma pagina, lemos essa pagina de dados.
+    # Isso simula o acesso ao "disco" no trabalho.
+    if page_number is not None:
+        data_pages_read = 1
+        page = get_page(dataset, page_number)
 
-        elapsed = perf_counter() - started_at
+        # Confirmamos se a palavra realmente esta nessa pagina.
+        if word in page:
+            found = True
+            page_result = preview_page(dataset, page_number)
 
-        return IndexSearchResult(
-            query=key,
-            found=found,
-            page_number=matched_page_number if found else None,
-            bucket_index=bucket_index,
-            bucket_pages_read=bucket_pages_read,
-            data_pages_read=data_pages_read,
-            total_page_reads=bucket_pages_read + data_pages_read,
-            bucket_entries_examined=entries_examined,
-            elapsed_seconds=elapsed,
-            bucket_snapshot=bucket.snapshot(bucket_index),
-            page_preview=page_preview,
-        )
+    # Este bloco prepara uma copia simples do bucket para mostrar na interface.
+    total_entries = len(bucket["primary"])
+    overflow_copy = []
 
-    def bucket_snapshot(self, bucket_index: int) -> BucketSnapshot:
-        return self.buckets[bucket_index].snapshot(bucket_index)
+    for overflow_page in bucket["overflow"]:
+        overflow_copy.append(list(overflow_page))
+        total_entries += len(overflow_page)
 
-    def _bucket_index_for(self, key: str) -> int:
-        return self._hash_function(key, self.bucket_count)
+    # Medimos o tempo gasto so nesta busca.
+    search_time = perf_counter() - start_time
+
+    return {
+        "query": word,
+        "found": found,
+        "page_number": page_number if found else None,
+        "bucket_index": bucket_number,
+        "bucket_pages_read": bucket_pages_read,
+        "data_pages_read": data_pages_read,
+        "total_page_reads": bucket_pages_read + data_pages_read,
+        "bucket_entries_examined": entries_checked,
+        "elapsed_seconds": search_time,
+        "bucket_snapshot": {
+            "bucket_index": bucket_number,
+            "primary_entries": list(bucket["primary"]),
+            "overflow_pages": overflow_copy,
+            "total_entries": total_entries,
+        },
+        "page_preview": page_result,
+    }
