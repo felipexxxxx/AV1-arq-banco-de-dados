@@ -292,7 +292,7 @@ def search_in_index(index, word, dataset):
         "bucket_index": bucket_number,
         "bucket_pages_read": bucket_pages_read,
         "data_pages_read": data_pages_read,
-        "total_page_reads": bucket_pages_read + data_pages_read,
+        "total_page_reads": data_pages_read, # Corrigido: o custo total não considera a leitura nos buckets, somente na página
         "bucket_entries_examined": entries_checked,
         "elapsed_seconds": search_time,
         "bucket_snapshot": {
