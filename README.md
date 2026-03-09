@@ -39,14 +39,17 @@ Tambem e possivel dar duplo clique em `main.py` se a associacao de arquivos `.py
 1. Clique em `Carregar TXT` e selecione o arquivo de palavras.
 2. Informe `Tamanho da pagina` (maior que zero).
 3. Informe `FR` (capacidade primaria do bucket, maior que zero).
-4. Escolha a hash deterministica (`FNV-1a` ou `Polinomial`).
-5. Clique em `Construir indice`.
-6. Digite uma palavra e use `Buscar via indice` e `Table scan`.
-7. Veja os paineis de metricas, paginas, resultados e comparacao.
+4. Escolha `Fator de carga NB` (`0.5` a `1.0`).
+5. Escolha a hash deterministica (`FNV-1a` ou `Polinomial`).
+6. Clique em `Construir indice`.
+7. Digite uma palavra e use `Buscar via indice` e `Table scan`.
+8. Veja os paineis de metricas, paginas, resultados e comparacao.
 
 ## Observacoes de implementacao
 
-- `NB` e calculado automaticamente como o proximo numero primo acima de `floor(NR / FR) + 1`, garantindo `NB > NR / FR`.
+- `NB` e calculado automaticamente com fator ajustavel na GUI: `NB = (NR // alvo) + 1`, onde `alvo = int(FR * fator)` (minimo 1).
+- Se `fator = 1.0`, o calculo fica equivalente ao formato `NB = (NR // FR) + 1`.
+- Valores menores (ex.: `0.5`, `0.6`) aumentam `NB` e tendem a reduzir overflow.
 - Colisao so e contabilizada quando o bucket primario (`FR`) ja esta cheio e e necessario inserir fora dele.
 - Overflow usa encadeamento de paginas por bucket, cada pagina de overflow com capacidade `FR`.
 - A interface mostra apenas resumos, o bucket acessado e previews de paginas, evitando renderizacao de estruturas gigantes.

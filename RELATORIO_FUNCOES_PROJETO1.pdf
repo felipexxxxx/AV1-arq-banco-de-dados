@@ -1,0 +1,1099 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 11 /Kids [ 4 0 R 6 0 R 8 0 R 10 0 R 12 0 R 14 0 R 16 0 R 18 0 R 20 0 R 22 0 R 24 0 R ] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 1926 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(PROJETO 1 - INDICE HASH) Tj
+0 -16 Td
+(MAPEAMENTO DAS FUNCOES + EXPLICACAO DETALHADA) Tj
+0 -16 Td
+(Data: 08/03/2026) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+(0\\) O QUE FOI ALTERADO NA VERSAO ATUAL) Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Alteracao implementada:) Tj
+0 -16 Td
+(- tornar o calculo de NB ajustavel na GUI para reduzir overflow.) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Arquivo alterado:) Tj
+0 -16 Td
+(- hash_index.py) Tj
+0 -16 Td
+(- funcao: calculate_bucket_count \\(linha 38\\)) Tj
+0 -16 Td
+(- gui.py \\(campo novo de fator NB\\)) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Antes:) Tj
+0 -16 Td
+(  NB = \\(NR // FR\\) + 1) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Agora:) Tj
+0 -16 Td
+(  alvo_por_bucket = int\\(FR * fator\\)  \\(minimo 1, fator entre 0 e 1\\)) Tj
+0 -16 Td
+(  NB = \\(NR // alvo_por_bucket\\) + 1) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Exemplo:) Tj
+0 -16 Td
+(- NR = 466000, FR = 4) Tj
+0 -16 Td
+(- fator = 1.0  -> alvo=4 -> NB ~ 116501) Tj
+0 -16 Td
+(- fator = 0.6  -> alvo=2 -> NB ~ 233001) Tj
+0 -16 Td
+(- fator = 0.5  -> alvo=2 -> NB ~ 233001) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Resultado esperado:) Tj
+0 -16 Td
+(- menos palavras por bucket em media) Tj
+0 -16 Td
+(- menor chance de bucket overflow) Tj
+0 -16 Td
+(- regra do PDF continua valida: NB > NR/FR) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+(1\\) ARQUITETURA SIMPLES DO SISTEMA) Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(O projeto esta dividido em 5 arquivos:) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(1\\) main.py) Tj
+0 -16 Td
+(   - ponto de entrada do programa \\(abre a GUI\\)) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(2\\) gui.py) Tj
+0 -16 Td
+(   - interface grafica Tkinter) Tj
+0 -16 Td
+(   - botoes, campos e exibicao de resultados) Tj
+0 -16 Td
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 1611 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(   - chama as funcoes dos outros modulos) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(3\\) data_pages.py) Tj
+0 -16 Td
+(   - leitura do TXT) Tj
+0 -16 Td
+(   - paginacao dos registros) Tj
+0 -16 Td
+(   - preview de paginas) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(4\\) hash_index.py) Tj
+0 -16 Td
+(   - funcoes hash deterministicas) Tj
+0 -16 Td
+(   - calculo de NB) Tj
+0 -16 Td
+(   - criacao e construcao do indice) Tj
+0 -16 Td
+(   - busca via indice) Tj
+0 -16 Td
+(   - tratamento de colisao e bucket overflow) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(5\\) metrics.py) Tj
+0 -16 Td
+(   - table scan) Tj
+0 -16 Td
+(   - comparacao indice x scan) Tj
+0 -16 Td
+(   - formatacao de tempo) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+(2\\) ESTRUTURAS DE DADOS USADAS) Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(2.1\\) Dataset \\(tabela de dados em memoria\\)) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Tipo: dicionario) Tj
+0 -16 Td
+(Formato:) Tj
+0 -16 Td
+({) Tj
+0 -16 Td
+(  "records": [palavra1, palavra2, ...],) Tj
+0 -16 Td
+(  "pages": [) Tj
+0 -16 Td
+(      [palavra1, palavra2, ...],) Tj
+0 -16 Td
+(      [palavraX, palavraY, ...],) Tj
+0 -16 Td
+(      ...) Tj
+0 -16 Td
+(  ],) Tj
+0 -16 Td
+(  "page_size": N,) Tj
+0 -16 Td
+(  "nr": total_de_registros,) Tj
+0 -16 Td
+(  "page_count": total_de_paginas) Tj
+0 -16 Td
+(}) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(2.2\\) Indice hash) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Tipo: dicionario) Tj
+0 -16 Td
+(Formato:) Tj
+0 -16 Td
+({) Tj
+0 -16 Td
+(  "bucket_capacity": FR,) Tj
+0 -16 Td
+(  "bucket_count": NB,) Tj
+0 -16 Td
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 1934 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(  "hash_algorithm": "FNV-1a" ou "Polinomial",) Tj
+0 -16 Td
+(  "hash_function": referencia de funcao,) Tj
+0 -16 Td
+(  "buckets": [bucket0, bucket1, ...],) Tj
+0 -16 Td
+(  "collision_count": inteiro,) Tj
+0 -16 Td
+(  "overflow_pages_created": inteiro,) Tj
+0 -16 Td
+(  "overflow_bucket_indexes": [ids de buckets]) Tj
+0 -16 Td
+(}) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(2.3\\) Bucket) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Cada bucket e um dicionario:) Tj
+0 -16 Td
+({) Tj
+0 -16 Td
+(  "primary": [ {"key": palavra, "page_number": n}, ... ],) Tj
+0 -16 Td
+(  "overflow": [) Tj
+0 -16 Td
+(      [ {"key": palavra, "page_number": n}, ... ],   <- bucket overflow 1) Tj
+0 -16 Td
+(      [ {"key": palavra, "page_number": n}, ... ],   <- bucket overflow 2) Tj
+0 -16 Td
+(      ...) Tj
+0 -16 Td
+(  ]) Tj
+0 -16 Td
+(}) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Observacao:) Tj
+0 -16 Td
+(- "pages" do dataset != "overflow" do bucket) Tj
+0 -16 Td
+(- pagina de dados guarda registros da tabela) Tj
+0 -16 Td
+(- bucket overflow guarda entradas do indice \\(chave -> pagina\\)) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+(3\\) ONDE ESTA CADA FUNCAO \\(COM EXEMPLO\\)) Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(------------------------------------------------------------) Tj
+0 -16 Td
+(3.1\\) data_pages.py) Tj
+0 -16 Td
+(------------------------------------------------------------) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: load_words_from_txt \\(linha 4\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- abre arquivo txt) Tj
+0 -16 Td
+(- le uma palavra por linha) Tj
+0 -16 Td
+(- ignora linha vazia) Tj
+0 -16 Td
+(- retorna lista de palavras) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Exemplo:) Tj
+0 -16 Td
+(- entrada: words_alpha.txt) Tj
+0 -16 Td
+(- saida: ["a", "aa", "aaa", ...]) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: create_dataset \\(linha 29\\)) Tj
+0 -16 Td
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 1683 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(O que faz:) Tj
+0 -16 Td
+(- recebe lista de palavras e page_size) Tj
+0 -16 Td
+(- divide em paginas) Tj
+0 -16 Td
+(- monta dicionario dataset) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Exemplo:) Tj
+0 -16 Td
+(- records = [w1,w2,w3,w4,w5], page_size=2) Tj
+0 -16 Td
+(- pages = [[w1,w2],[w3,w4],[w5]]) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: get_page \\(linha 63\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- retorna a pagina pedida \\(numero 1-based\\)) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Exemplo:) Tj
+0 -16 Td
+(- get_page\\(dataset, 1\\) -> primeira pagina) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: preview_page \\(linha 73\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- retorna resumo da pagina) Tj
+0 -16 Td
+(- numero da pagina, quantidade de registros, 5 primeiros) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Exemplo de retorno:) Tj
+0 -16 Td
+({) Tj
+0 -16 Td
+(  "page_number": 2892,) Tj
+0 -16 Td
+(  "record_count": 57,) Tj
+0 -16 Td
+(  "first_records": ["zosteraceae", "zosteriform", ...]) Tj
+0 -16 Td
+(}) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(------------------------------------------------------------) Tj
+0 -16 Td
+(3.2\\) hash_index.py) Tj
+0 -16 Td
+(------------------------------------------------------------) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: available_hash_algorithms \\(linha 11\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- devolve lista de nomes para a GUI.) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: fnv1a_hash \\(linha 16\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- calcula hash FNV-1a \\(deterministica\\)) Tj
+0 -16 Td
+(- retorna bucket no intervalo [0..NB-1]) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Exemplo:) Tj
+0 -16 Td
+(- mesma palavra + mesmo NB -> mesmo bucket.) Tj
+0 -16 Td
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 1648 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: polynomial_hash \\(linha 30\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- segunda hash deterministica) Tj
+0 -16 Td
+(- tambem retorna [0..NB-1]) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: calculate_bucket_count \\(linha 38\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- calcula NB automaticamente usando fator ajustavel) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Regra:) Tj
+0 -16 Td
+(- alvo = int\\(FR * fator\\), com fator entre 0 e 1) Tj
+0 -16 Td
+(- NB = \\(NR//alvo\\) + 1) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Observacao:) Tj
+0 -16 Td
+(- se fator = 1.0, o calculo fica equivalente ao divisor FR.) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: validate_bucket_count \\(linha 58\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- valida a regra do trabalho: NB > NR/FR) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: create_hash_index \\(linha 64\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- cria estrutura do indice vazia) Tj
+0 -16 Td
+(- cria lista com NB buckets) Tj
+0 -16 Td
+(- cada bucket com area primary e lista overflow) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: build_index \\(linha 97\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- percorre paginas e palavras) Tj
+0 -16 Td
+(- aplica hash) Tj
+0 -16 Td
+(- insere \\(key, page_number\\) no bucket) Tj
+0 -16 Td
+(- trata colisao) Tj
+0 -16 Td
+(- trata bucket overflow) Tj
+0 -16 Td
+(- mede tempo de construcao) Tj
+0 -16 Td
+(- calcula taxas) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Regra de colisao implementada:) Tj
+0 -16 Td
+(- so conta colisao quando bucket primary ja esta cheio.) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Regra de overflow implementada:) Tj
+0 -16 Td
+ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 15 0 R >>
+endobj
+15 0 obj
+<< /Length 1809 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(- quando primary enche, cria bucket overflow \\(lista extra\\).) Tj
+0 -16 Td
+(- se bucket overflow atual enche, cria outro.) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: search_in_index \\(linha 176\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- hash da palavra -> bucket) Tj
+0 -16 Td
+(- procura no primary) Tj
+0 -16 Td
+(- se necessario, procura em buckets overflow) Tj
+0 -16 Td
+(- se achar page_number, confirma palavra na pagina de dados) Tj
+0 -16 Td
+(- devolve tempo, custo, bucket snapshot) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Custo atual:) Tj
+0 -16 Td
+(- total_page_reads = apenas leitura da pagina de dados) Tj
+0 -16 Td
+(- conforme regra pedida pelo professor.) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Exemplo de saida:) Tj
+0 -16 Td
+(- found=True) Tj
+0 -16 Td
+(- bucket_index=36685) Tj
+0 -16 Td
+(- page_number=2892) Tj
+0 -16 Td
+(- bucket_pages_read=3) Tj
+0 -16 Td
+(- data_pages_read=1) Tj
+0 -16 Td
+(- total_page_reads=1) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(------------------------------------------------------------) Tj
+0 -16 Td
+(3.3\\) metrics.py) Tj
+0 -16 Td
+(------------------------------------------------------------) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: format_seconds \\(linha 6\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- mostra tempo em ms e segundos para facilitar leitura.) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: table_scan \\(linha 16\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- busca sequencial pagina por pagina) Tj
+0 -16 Td
+(- conta paginas lidas e registros lidos) Tj
+0 -16 Td
+(- para quando encontra a palavra) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Exemplo:) Tj
+0 -16 Td
+(- se palavra esta na pagina 2892:) Tj
+0 -16 Td
+(  pages_read=2892) Tj
+0 -16 Td
+(  records_read ate aquele ponto) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: compare_searches \\(linha 75\\)) Tj
+0 -16 Td
+ET
+endstream
+endobj
+16 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 17 0 R >>
+endobj
+17 0 obj
+<< /Length 1844 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(O que faz:) Tj
+0 -16 Td
+(- compara resultado da busca por indice com table scan) Tj
+0 -16 Td
+(- exige mesma palavra) Tj
+0 -16 Td
+(- calcula:) Tj
+0 -16 Td
+(  delta_tempo = scan - indice) Tj
+0 -16 Td
+(  delta_custo = scan - indice) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Interpretacao:) Tj
+0 -16 Td
+(- valor positivo => indice foi melhor.) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(------------------------------------------------------------) Tj
+0 -16 Td
+(3.4\\) gui.py) Tj
+0 -16 Td
+(------------------------------------------------------------) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Classe: HashIndexApp \\(linha 40\\)) Tj
+0 -16 Td
+(O que faz:) Tj
+0 -16 Td
+(- monta toda interface grafica) Tj
+0 -16 Td
+(- gerencia estados \\(dataset, indice, resultados\\)) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Metodo: __init__ \\(linha 41\\)) Tj
+0 -16 Td
+(- inicializa variaveis) Tj
+0 -16 Td
+(- configura tema) Tj
+0 -16 Td
+(- monta layout) Tj
+0 -16 Td
+(- renderiza paineis iniciais) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Metodo: _load_file \\(linha 390\\)) Tj
+0 -16 Td
+(- abre seletor de arquivo) Tj
+0 -16 Td
+(- chama load_words_from_txt) Tj
+0 -16 Td
+(- mostra total NR) Tj
+0 -16 Td
+(- limpa resultados antigos) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Metodo: _build_index \\(linha 425\\)) Tj
+0 -16 Td
+(- valida page_size e FR) Tj
+0 -16 Td
+(- chama create_dataset) Tj
+0 -16 Td
+(- calcula NB) Tj
+0 -16 Td
+(- valida NB > NR/FR) Tj
+0 -16 Td
+(- cria indice e constroi \\(build_index\\)) Tj
+0 -16 Td
+(- atualiza paineis da interface) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Metodo: _search_by_index \\(linha 484\\)) Tj
+0 -16 Td
+(- chama search_in_index) Tj
+0 -16 Td
+(- atualiza painel de busca por indice e comparacao) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Metodo: _run_table_scan \\(linha 505\\)) Tj
+0 -16 Td
+(- chama table_scan somente quando clicar no botao) Tj
+0 -16 Td
+(- atualiza painel de scan e comparacao) Tj
+0 -16 Td
+ET
+endstream
+endobj
+18 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 19 0 R >>
+endobj
+19 0 obj
+<< /Length 2054 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+() Tj
+0 -16 Td
+(Metodo: _render_dataset_summary \\(linha 522\\)) Tj
+0 -16 Td
+(- mostra NR, pagina, FR, NB) Tj
+0 -16 Td
+(- mostra tempo de construcao) Tj
+0 -16 Td
+(- mostra colisoes e overflow \\(quantidade + taxa\\)) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Metodo: _render_page_summary \\(linha 579\\)) Tj
+0 -16 Td
+(- mostra primeira e ultima pagina com 5 primeiros registros) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Metodo: _render_index_result \\(linha 617\\)) Tj
+0 -16 Td
+(- mostra resultado da busca via indice:) Tj
+0 -16 Td
+(  bucket calculado, leituras, custo, tempo, pagina) Tj
+0 -16 Td
+(- mostra snapshot do bucket \\(primary + overflow\\)) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Metodo: _render_scan_result \\(linha 665\\)) Tj
+0 -16 Td
+(- mostra resultado do table scan:) Tj
+0 -16 Td
+(  paginas lidas, registros lidos, custo, tempo, pagina) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Metodo: _render_comparison \\(linha 713\\)) Tj
+0 -16 Td
+(- mostra comparacao final:) Tj
+0 -16 Td
+(  tempo indice, tempo scan) Tj
+0 -16 Td
+(  custo indice, custo scan) Tj
+0 -16 Td
+(  delta tempo, delta custo) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Metodo: _format_bucket_snapshot \\(linha 757\\)) Tj
+0 -16 Td
+(- formata o texto do bucket para visualizacao) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Funcao: launch_app \\(linha 783\\)) Tj
+0 -16 Td
+(- inicia app Tkinter.) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(------------------------------------------------------------) Tj
+0 -16 Td
+(3.5\\) main.py) Tj
+0 -16 Td
+(------------------------------------------------------------) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Arquivo simples:) Tj
+0 -16 Td
+(- importa launch_app) Tj
+0 -16 Td
+(- roda launch_app quando executar python main.py) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+(4\\) CHECKLIST DO PDF DO TRABALHO \\(HU\\)) Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU01 - Carregar arquivo de palavras) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: gui.py linha 390 + data_pages.py linha 4) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+ET
+endstream
+endobj
+20 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 21 0 R >>
+endobj
+21 0 obj
+<< /Length 1713 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(HU02 - Definir tamanho de pagina) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: gui.py linhas 224/436/442 + data_pages.py linha 29) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU03 - Dividir registros em paginas) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: data_pages.py linha 29 + gui.py linha 579) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU04 - Criar buckets) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: hash_index.py linhas 38/60/66 + gui.py linha 448) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU05 - Funcao hash configuravel) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: hash_index.py linhas 16/30 + gui.py linha 244) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU06 - Construir indice percorrendo paginas) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: hash_index.py linha 99) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU07 - Resolver colisoes) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: hash_index.py linhas 121-126) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU08 - Resolver overflow de buckets) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: hash_index.py linhas 127-144) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU09 - Buscar chave usando indice) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: gui.py linha 484 + hash_index.py linha 178) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU10 - Executar table scan) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: gui.py linha 505 + metrics.py linha 16) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU11 - Comparar tempo e custo) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: metrics.py linha 75 + gui.py linha 713) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU12 - Taxa de colisoes) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: hash_index.py linha 155 + gui.py linha 571) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU13 - Taxa de overflow) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+ET
+endstream
+endobj
+22 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 23 0 R >>
+endobj
+23 0 obj
+<< /Length 2342 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(Onde: hash_index.py linha 160 + gui.py linha 574) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(HU14 - Interface grafica e visualizacao) Tj
+0 -16 Td
+(Status: FEITO) Tj
+0 -16 Td
+(Onde: gui.py \\(classe HashIndexApp inteira\\)) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+(5\\) EXEMPLO PRATICO COMPLETO \\(PASSO A PASSO\\)) Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(Palavra de exemplo: zwitterionic) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(1\\) Busca por indice:) Tj
+0 -16 Td
+(- GUI chama search_in_index) Tj
+0 -16 Td
+(- hash calcula bucket \\(ex: 36685\\)) Tj
+0 -16 Td
+(- procura no primary) Tj
+0 -16 Td
+(- se nao achar, vai para buckets overflow) Tj
+0 -16 Td
+(- encontra page_number \\(ex: 2892\\)) Tj
+0 -16 Td
+(- confirma na pagina 2892 do dataset) Tj
+0 -16 Td
+(- mostra resultado e tempo) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(2\\) Table scan:) Tj
+0 -16 Td
+(- le pagina 1, 2, 3... ate 2892) Tj
+0 -16 Td
+(- confere palavra por palavra) Tj
+0 -16 Td
+(- para quando encontrar) Tj
+0 -16 Td
+(- mostra paginas lidas e tempo) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(3\\) Comparacao:) Tj
+0 -16 Td
+(- delta tempo = tempo_scan - tempo_indice) Tj
+0 -16 Td
+(- delta custo = custo_scan - custo_indice) Tj
+0 -16 Td
+(- positivo = indice melhor) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+(6\\) COMO EXPLICAR AO PROFESSOR EM 1 MINUTO) Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+("Professor, o sistema simula um indice hash estatico em memoria.) Tj
+0 -16 Td
+(Eu carrego o TXT, defino tamanho de pagina e FR, o sistema pagina os dados) Tj
+0 -16 Td
+(e calcula NB automaticamente. Na construcao, ele percorre pagina por pagina,) Tj
+0 -16 Td
+(aplica hash deterministica e guarda \\(chave, pagina\\) nos buckets.) Tj
+0 -16 Td
+(Quando o bucket primario enche, ele conta colisao e cria bucket overflow.) Tj
+0 -16 Td
+(Na busca por indice, ele calcula o bucket, procura no primario/overflow,) Tj
+0 -16 Td
+(confirma na pagina real e mostra custo e tempo. Depois eu rodo table scan) Tj
+0 -16 Td
+(pagina por pagina e comparo custo e tempo entre os dois." ) Tj
+0 -16 Td
+() Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+ET
+endstream
+endobj
+24 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 25 0 R >>
+endobj
+25 0 obj
+<< /Length 118 >>
+stream
+BT
+/F1 10 Tf
+50 800 Td
+(FIM) Tj
+0 -16 Td
+(============================================================) Tj
+0 -16 Td
+ET
+endstream
+endobj
+xref
+0 26
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000186 00000 n 
+0000000254 00000 n 
+0000000380 00000 n 
+0000002358 00000 n 
+0000002484 00000 n 
+0000004147 00000 n 
+0000004273 00000 n 
+0000006259 00000 n 
+0000006387 00000 n 
+0000008123 00000 n 
+0000008251 00000 n 
+0000009952 00000 n 
+0000010080 00000 n 
+0000011942 00000 n 
+0000012070 00000 n 
+0000013967 00000 n 
+0000014095 00000 n 
+0000016202 00000 n 
+0000016330 00000 n 
+0000018096 00000 n 
+0000018224 00000 n 
+0000020619 00000 n 
+0000020747 00000 n 
+trailer
+<< /Size 26 /Root 1 0 R >>
+startxref
+20917
+%%EOF

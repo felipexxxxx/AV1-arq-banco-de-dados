@@ -1,0 +1,462 @@
+PROJETO 1 - INDICE HASH
+MAPEAMENTO DAS FUNCOES + EXPLICACAO DETALHADA
+Data: 08/03/2026
+
+============================================================
+0) O QUE FOI ALTERADO NA VERSAO ATUAL
+============================================================
+
+Alteracao implementada:
+- tornar o calculo de NB ajustavel na GUI para reduzir overflow.
+
+Arquivo alterado:
+- hash_index.py
+- funcao: calculate_bucket_count (linha 38)
+- gui.py (campo novo de fator NB)
+
+Antes:
+  NB = (NR // FR) + 1
+
+Agora:
+  alvo_por_bucket = int(FR * fator)  (minimo 1, fator entre 0 e 1)
+  NB = (NR // alvo_por_bucket) + 1
+
+Exemplo:
+- NR = 466000, FR = 4
+- fator = 1.0  -> alvo=4 -> NB ~ 116501
+- fator = 0.6  -> alvo=2 -> NB ~ 233001
+- fator = 0.5  -> alvo=2 -> NB ~ 233001
+
+Resultado esperado:
+- menos palavras por bucket em media
+- menor chance de bucket overflow
+- regra do PDF continua valida: NB > NR/FR
+
+============================================================
+1) ARQUITETURA SIMPLES DO SISTEMA
+============================================================
+
+O projeto esta dividido em 5 arquivos:
+
+1) main.py
+   - ponto de entrada do programa (abre a GUI)
+
+2) gui.py
+   - interface grafica Tkinter
+   - botoes, campos e exibicao de resultados
+   - chama as funcoes dos outros modulos
+
+3) data_pages.py
+   - leitura do TXT
+   - paginacao dos registros
+   - preview de paginas
+
+4) hash_index.py
+   - funcoes hash deterministicas
+   - calculo de NB
+   - criacao e construcao do indice
+   - busca via indice
+   - tratamento de colisao e bucket overflow
+
+5) metrics.py
+   - table scan
+   - comparacao indice x scan
+   - formatacao de tempo
+
+============================================================
+2) ESTRUTURAS DE DADOS USADAS
+============================================================
+
+2.1) Dataset (tabela de dados em memoria)
+
+Tipo: dicionario
+Formato:
+{
+  "records": [palavra1, palavra2, ...],
+  "pages": [
+      [palavra1, palavra2, ...],
+      [palavraX, palavraY, ...],
+      ...
+  ],
+  "page_size": N,
+  "nr": total_de_registros,
+  "page_count": total_de_paginas
+}
+
+2.2) Indice hash
+
+Tipo: dicionario
+Formato:
+{
+  "bucket_capacity": FR,
+  "bucket_count": NB,
+  "hash_algorithm": "FNV-1a" ou "Polinomial",
+  "hash_function": referencia de funcao,
+  "buckets": [bucket0, bucket1, ...],
+  "collision_count": inteiro,
+  "overflow_pages_created": inteiro,
+  "overflow_bucket_indexes": [ids de buckets]
+}
+
+2.3) Bucket
+
+Cada bucket e um dicionario:
+{
+  "primary": [ {"key": palavra, "page_number": n}, ... ],
+  "overflow": [
+      [ {"key": palavra, "page_number": n}, ... ],   <- bucket overflow 1
+      [ {"key": palavra, "page_number": n}, ... ],   <- bucket overflow 2
+      ...
+  ]
+}
+
+Observacao:
+- "pages" do dataset != "overflow" do bucket
+- pagina de dados guarda registros da tabela
+- bucket overflow guarda entradas do indice (chave -> pagina)
+
+============================================================
+3) ONDE ESTA CADA FUNCAO (COM EXEMPLO)
+============================================================
+
+------------------------------------------------------------
+3.1) data_pages.py
+------------------------------------------------------------
+
+Funcao: load_words_from_txt (linha 4)
+O que faz:
+- abre arquivo txt
+- le uma palavra por linha
+- ignora linha vazia
+- retorna lista de palavras
+
+Exemplo:
+- entrada: words_alpha.txt
+- saida: ["a", "aa", "aaa", ...]
+
+
+Funcao: create_dataset (linha 29)
+O que faz:
+- recebe lista de palavras e page_size
+- divide em paginas
+- monta dicionario dataset
+
+Exemplo:
+- records = [w1,w2,w3,w4,w5], page_size=2
+- pages = [[w1,w2],[w3,w4],[w5]]
+
+
+Funcao: get_page (linha 63)
+O que faz:
+- retorna a pagina pedida (numero 1-based)
+
+Exemplo:
+- get_page(dataset, 1) -> primeira pagina
+
+
+Funcao: preview_page (linha 73)
+O que faz:
+- retorna resumo da pagina
+- numero da pagina, quantidade de registros, 5 primeiros
+
+Exemplo de retorno:
+{
+  "page_number": 2892,
+  "record_count": 57,
+  "first_records": ["zosteraceae", "zosteriform", ...]
+}
+
+------------------------------------------------------------
+3.2) hash_index.py
+------------------------------------------------------------
+
+Funcao: available_hash_algorithms (linha 11)
+O que faz:
+- devolve lista de nomes para a GUI.
+
+
+Funcao: fnv1a_hash (linha 16)
+O que faz:
+- calcula hash FNV-1a (deterministica)
+- retorna bucket no intervalo [0..NB-1]
+
+Exemplo:
+- mesma palavra + mesmo NB -> mesmo bucket.
+
+
+Funcao: polynomial_hash (linha 30)
+O que faz:
+- segunda hash deterministica
+- tambem retorna [0..NB-1]
+
+
+Funcao: calculate_bucket_count (linha 38)
+O que faz:
+- calcula NB automaticamente usando fator ajustavel
+
+Regra:
+- alvo = int(FR * fator), com fator entre 0 e 1
+- NB = (NR//alvo) + 1
+
+Observacao:
+- se fator = 1.0, o calculo fica equivalente ao divisor FR.
+
+
+Funcao: validate_bucket_count (linha 58)
+O que faz:
+- valida a regra do trabalho: NB > NR/FR
+
+
+Funcao: create_hash_index (linha 64)
+O que faz:
+- cria estrutura do indice vazia
+- cria lista com NB buckets
+- cada bucket com area primary e lista overflow
+
+
+Funcao: build_index (linha 97)
+O que faz:
+- percorre paginas e palavras
+- aplica hash
+- insere (key, page_number) no bucket
+- trata colisao
+- trata bucket overflow
+- mede tempo de construcao
+- calcula taxas
+
+Regra de colisao implementada:
+- so conta colisao quando bucket primary ja esta cheio.
+
+Regra de overflow implementada:
+- quando primary enche, cria bucket overflow (lista extra).
+- se bucket overflow atual enche, cria outro.
+
+
+Funcao: search_in_index (linha 176)
+O que faz:
+- hash da palavra -> bucket
+- procura no primary
+- se necessario, procura em buckets overflow
+- se achar page_number, confirma palavra na pagina de dados
+- devolve tempo, custo, bucket snapshot
+
+Custo atual:
+- total_page_reads = apenas leitura da pagina de dados
+- conforme regra pedida pelo professor.
+
+Exemplo de saida:
+- found=True
+- bucket_index=36685
+- page_number=2892
+- bucket_pages_read=3
+- data_pages_read=1
+- total_page_reads=1
+
+------------------------------------------------------------
+3.3) metrics.py
+------------------------------------------------------------
+
+Funcao: format_seconds (linha 6)
+O que faz:
+- mostra tempo em ms e segundos para facilitar leitura.
+
+
+Funcao: table_scan (linha 16)
+O que faz:
+- busca sequencial pagina por pagina
+- conta paginas lidas e registros lidos
+- para quando encontra a palavra
+
+Exemplo:
+- se palavra esta na pagina 2892:
+  pages_read=2892
+  records_read ate aquele ponto
+
+
+Funcao: compare_searches (linha 75)
+O que faz:
+- compara resultado da busca por indice com table scan
+- exige mesma palavra
+- calcula:
+  delta_tempo = scan - indice
+  delta_custo = scan - indice
+
+Interpretacao:
+- valor positivo => indice foi melhor.
+
+------------------------------------------------------------
+3.4) gui.py
+------------------------------------------------------------
+
+Classe: HashIndexApp (linha 40)
+O que faz:
+- monta toda interface grafica
+- gerencia estados (dataset, indice, resultados)
+
+Metodo: __init__ (linha 41)
+- inicializa variaveis
+- configura tema
+- monta layout
+- renderiza paineis iniciais
+
+Metodo: _load_file (linha 390)
+- abre seletor de arquivo
+- chama load_words_from_txt
+- mostra total NR
+- limpa resultados antigos
+
+Metodo: _build_index (linha 425)
+- valida page_size e FR
+- chama create_dataset
+- calcula NB
+- valida NB > NR/FR
+- cria indice e constroi (build_index)
+- atualiza paineis da interface
+
+Metodo: _search_by_index (linha 484)
+- chama search_in_index
+- atualiza painel de busca por indice e comparacao
+
+Metodo: _run_table_scan (linha 505)
+- chama table_scan somente quando clicar no botao
+- atualiza painel de scan e comparacao
+
+Metodo: _render_dataset_summary (linha 522)
+- mostra NR, pagina, FR, NB
+- mostra tempo de construcao
+- mostra colisoes e overflow (quantidade + taxa)
+
+Metodo: _render_page_summary (linha 579)
+- mostra primeira e ultima pagina com 5 primeiros registros
+
+Metodo: _render_index_result (linha 617)
+- mostra resultado da busca via indice:
+  bucket calculado, leituras, custo, tempo, pagina
+- mostra snapshot do bucket (primary + overflow)
+
+Metodo: _render_scan_result (linha 665)
+- mostra resultado do table scan:
+  paginas lidas, registros lidos, custo, tempo, pagina
+
+Metodo: _render_comparison (linha 713)
+- mostra comparacao final:
+  tempo indice, tempo scan
+  custo indice, custo scan
+  delta tempo, delta custo
+
+Metodo: _format_bucket_snapshot (linha 757)
+- formata o texto do bucket para visualizacao
+
+Funcao: launch_app (linha 783)
+- inicia app Tkinter.
+
+------------------------------------------------------------
+3.5) main.py
+------------------------------------------------------------
+
+Arquivo simples:
+- importa launch_app
+- roda launch_app quando executar python main.py
+
+============================================================
+4) CHECKLIST DO PDF DO TRABALHO (HU)
+============================================================
+
+HU01 - Carregar arquivo de palavras
+Status: FEITO
+Onde: gui.py linha 390 + data_pages.py linha 4
+
+HU02 - Definir tamanho de pagina
+Status: FEITO
+Onde: gui.py linhas 224/436/442 + data_pages.py linha 29
+
+HU03 - Dividir registros em paginas
+Status: FEITO
+Onde: data_pages.py linha 29 + gui.py linha 579
+
+HU04 - Criar buckets
+Status: FEITO
+Onde: hash_index.py linhas 38/60/66 + gui.py linha 448
+
+HU05 - Funcao hash configuravel
+Status: FEITO
+Onde: hash_index.py linhas 16/30 + gui.py linha 244
+
+HU06 - Construir indice percorrendo paginas
+Status: FEITO
+Onde: hash_index.py linha 99
+
+HU07 - Resolver colisoes
+Status: FEITO
+Onde: hash_index.py linhas 121-126
+
+HU08 - Resolver overflow de buckets
+Status: FEITO
+Onde: hash_index.py linhas 127-144
+
+HU09 - Buscar chave usando indice
+Status: FEITO
+Onde: gui.py linha 484 + hash_index.py linha 178
+
+HU10 - Executar table scan
+Status: FEITO
+Onde: gui.py linha 505 + metrics.py linha 16
+
+HU11 - Comparar tempo e custo
+Status: FEITO
+Onde: metrics.py linha 75 + gui.py linha 713
+
+HU12 - Taxa de colisoes
+Status: FEITO
+Onde: hash_index.py linha 155 + gui.py linha 571
+
+HU13 - Taxa de overflow
+Status: FEITO
+Onde: hash_index.py linha 160 + gui.py linha 574
+
+HU14 - Interface grafica e visualizacao
+Status: FEITO
+Onde: gui.py (classe HashIndexApp inteira)
+
+============================================================
+5) EXEMPLO PRATICO COMPLETO (PASSO A PASSO)
+============================================================
+
+Palavra de exemplo: zwitterionic
+
+1) Busca por indice:
+- GUI chama search_in_index
+- hash calcula bucket (ex: 36685)
+- procura no primary
+- se nao achar, vai para buckets overflow
+- encontra page_number (ex: 2892)
+- confirma na pagina 2892 do dataset
+- mostra resultado e tempo
+
+2) Table scan:
+- le pagina 1, 2, 3... ate 2892
+- confere palavra por palavra
+- para quando encontrar
+- mostra paginas lidas e tempo
+
+3) Comparacao:
+- delta tempo = tempo_scan - tempo_indice
+- delta custo = custo_scan - custo_indice
+- positivo = indice melhor
+
+============================================================
+6) COMO EXPLICAR AO PROFESSOR EM 1 MINUTO
+============================================================
+
+"Professor, o sistema simula um indice hash estatico em memoria.
+Eu carrego o TXT, defino tamanho de pagina e FR, o sistema pagina os dados
+e calcula NB automaticamente. Na construcao, ele percorre pagina por pagina,
+aplica hash deterministica e guarda (chave, pagina) nos buckets.
+Quando o bucket primario enche, ele conta colisao e cria bucket overflow.
+Na busca por indice, ele calcula o bucket, procura no primario/overflow,
+confirma na pagina real e mostra custo e tempo. Depois eu rodo table scan
+pagina por pagina e comparo custo e tempo entre os dois." 
+
+============================================================
+FIM
+============================================================

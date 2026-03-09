@@ -4,8 +4,13 @@ from data_pages import preview_page
 
 
 def format_seconds(seconds):
-    # Converte segundos para milissegundos so para ficar mais facil de ler na tela.
-    return f"{seconds * 1000:.3f} ms"
+    # Mostra em ms e em s para evitar confusao de leitura.
+    ms = seconds * 1000.0
+    if seconds < 1:
+        text = f"{ms:.3f} ms ({seconds:.4f} s)"
+    else:
+        text = f"{seconds:.3f} s ({ms:.1f} ms)"
+    return text.replace(".", ",")
 
 
 def table_scan(dataset, query, preview_limit=20):

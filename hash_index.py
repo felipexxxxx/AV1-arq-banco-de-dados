@@ -3,77 +3,70 @@ from time import perf_counter
 from data_pages import get_page, preview_page
 
 
+# Nomes exibidos na interface.
 FNV1A_NAME = "FNV-1a"
 POLYNOMIAL_NAME = "Polinomial"
 
 
 def available_hash_algorithms():
-    # A interface usa esta lista para preencher o campo de escolha de hash.
+    # A interface usa essa lista para preencher o combobox.
     return [FNV1A_NAME, POLYNOMIAL_NAME]
 
 
 def fnv1a_hash(word, bucket_count):
-    # Esta eh uma hash deterministica.
-    # "Deterministica" significa:
-    # a mesma palavra sempre cai no mesmo bucket.
-    #
-    # No final, ela sempre devolve um numero entre 0 e bucket_count - 1.
+    # Hash deterministica:
+    # mesma palavra -> mesmo bucket.
     value = 2166136261
 
-    # A palavra eh lida byte por byte.
-    # Cada byte altera o valor final.
+    # Mistura os bytes da palavra para gerar um numero.
     for byte in word.encode("utf-8"):
         value = value ^ byte
         value = (value * 16777619) & 0xFFFFFFFF
 
-    # O operador % limita o resultado ao intervalo valido de buckets.
+    # Limita o resultado para o intervalo de buckets [0..NB-1].
     return value % bucket_count
 
 
 def polynomial_hash(word, bucket_count):
-    # Outra hash simples e deterministica.
-    # Em vez de trabalhar com bytes, ela trabalha letra por letra.
+    # Segunda opcao de hash, tambem deterministica.
     value = 0
-
-    # ord(char) transforma a letra em numero.
     for char in word:
         value = (value * 53 + ord(char)) % 2147483647
-
     return value % bucket_count
 
 
-def calculate_bucket_count(record_count, bucket_capacity):
+def calculate_bucket_count(record_count, bucket_capacity, load_factor=0.5):
     # Regra do trabalho:
     # NB > NR / FR
-    #
-    # A forma mais simples de garantir isso eh:
-    # NB = (NR // FR) + 1
     if bucket_capacity <= 0:
         raise ValueError("FR deve ser maior que zero.")
 
-    return (record_count // bucket_capacity) + 1
+    # Fator ajustavel (0 < fator <= 1):
+    # - 1.0  -> alvo = FR (equivalente a usar FR completo no divisor)
+    # - 0.5  -> alvo = FR/2 (mais buckets, menos overflow)
+    # - 0.6  -> alvo = 60% de FR
+    if load_factor <= 0 or load_factor > 1:
+        raise ValueError("Fator de carga deve estar entre 0 e 1.")
+
+    # Define quantos registros por bucket queremos em media.
+    target_records_per_bucket = int(bucket_capacity * load_factor)
+    if target_records_per_bucket < 1:
+        target_records_per_bucket = 1
+
+    # Ainda respeita NB > NR/FR, porque o divisor ficou menor.
+    return (record_count // target_records_per_bucket) + 1
 
 
 def validate_bucket_count(bucket_count, record_count, bucket_capacity):
-    # Esta funcao apenas confere se o NB calculado respeita a regra.
     if bucket_capacity <= 0:
         return False
-
     return bucket_count > (record_count / bucket_capacity)
 
 
 def create_hash_index(bucket_capacity, bucket_count, hash_algorithm=FNV1A_NAME):
-    # Esta funcao cria o indice vazio.
-    #
-    # Estrutura usada:
-    # - o indice todo eh um dicionario
-    # - dentro dele existe uma lista de buckets
-    # - cada bucket tem:
-    #   - "primary": area principal
-    #   - "overflow": paginas extras
+    # Cria o indice vazio com NB buckets.
     if bucket_capacity <= 0:
         raise ValueError("FR deve ser maior que zero.")
-
     if bucket_count <= 0:
         raise ValueError("NB deve ser maior que zero.")
 
@@ -82,16 +75,13 @@ def create_hash_index(bucket_capacity, bucket_count, hash_algorithm=FNV1A_NAME):
     else:
         hash_function = fnv1a_hash
 
-    # Aqui criamos todos os buckets vazios.
     buckets = []
     i = 0
     while i < bucket_count:
-        buckets.append(
-            {
-                "primary": [],
-                "overflow": [],
-            }
-        )
+        # Cada bucket tem:
+        # - primary: area principal (capacidade FR)
+        # - overflow: lista de paginas de bucket overflow
+        buckets.append({"primary": [], "overflow": []})
         i += 1
 
     return {
@@ -107,26 +97,11 @@ def create_hash_index(bucket_capacity, bucket_count, hash_algorithm=FNV1A_NAME):
 
 
 def build_index(index, dataset):
-    # Esta funcao monta o indice completo.
-    #
-    # Ela percorre:
-    # 1. cada pagina
-    # 2. cada palavra da pagina
-    # 3. calcula o bucket pela hash
-    # 4. guarda (palavra -> numero_da_pagina)
-    #
-    # Se o bucket principal lotar, entra em overflow.
-
-    # Primeiro, limpamos o indice para reconstruir tudo do zero.
+    # Reconstrui o indice do zero para os dados atuais.
     buckets = []
     i = 0
     while i < index["bucket_count"]:
-        buckets.append(
-            {
-                "primary": [],
-                "overflow": [],
-            }
-        )
+        buckets.append({"primary": [], "overflow": []})
         i += 1
 
     index["buckets"] = buckets
@@ -136,67 +111,55 @@ def build_index(index, dataset):
 
     start_time = perf_counter()
 
-    # page_number comeca em 1 porque a interface mostra paginas assim.
+    # Percorre pagina por pagina e palavra por palavra.
     page_number = 1
     for page in dataset["pages"]:
         for word in page:
-            # A hash diz qual bucket essa palavra deve usar.
             bucket_number = index["hash_function"](word, index["bucket_count"])
             bucket = index["buckets"][bucket_number]
+            item = {"key": word, "page_number": page_number}
 
-            # O indice guarda:
-            # - a chave (palavra)
-            # - a pagina onde a palavra esta
-            item = {
-                "key": word,
-                "page_number": page_number,
-            }
-
-            # Se ainda cabe no bucket principal, colocamos ali.
+            # Se cabe no primario, insere no primario.
             if len(bucket["primary"]) < index["bucket_capacity"]:
                 bucket["primary"].append(item)
             else:
-                # So contamos colisao quando o bucket principal ja esta cheio.
+                # Colisao: so conta quando o primario esta cheio.
                 index["collision_count"] += 1
 
-                # Guardamos o numero do bucket que entrou em overflow.
-                # Isso eh usado depois para calcular a taxa de overflow.
+                # Marca que esse bucket entrou em overflow.
                 if bucket_number not in index["overflow_bucket_indexes"]:
                     index["overflow_bucket_indexes"].append(bucket_number)
 
-                # Se ainda nao existe overflow, criamos a primeira pagina extra.
+                # Cria a primeira pagina de bucket overflow, se necessario.
                 if len(bucket["overflow"]) == 0:
                     bucket["overflow"].append([])
                     index["overflow_pages_created"] += 1
 
-                # Pegamos a ultima pagina de overflow criada.
-                last_page = bucket["overflow"][-1]
-
-                # Se essa ultima pagina ja lotou, criamos outra.
-                if len(last_page) >= index["bucket_capacity"]:
+                # Se a ultima pagina de overflow encheu, cria outra.
+                last_overflow_page = bucket["overflow"][-1]
+                if len(last_overflow_page) >= index["bucket_capacity"]:
                     bucket["overflow"].append([])
                     index["overflow_pages_created"] += 1
-                    last_page = bucket["overflow"][-1]
+                    last_overflow_page = bucket["overflow"][-1]
 
-                # Finalmente colocamos a palavra na ultima pagina de overflow.
-                last_page.append(item)
+                # Insere na pagina de overflow atual.
+                last_overflow_page.append(item)
 
         page_number += 1
 
-    # Medimos o tempo total da construcao do indice.
     build_time = perf_counter() - start_time
 
     if dataset["nr"] == 0:
         collision_rate = 0.0
     else:
-        # Taxa de colisao = colisoes / total de registros.
         collision_rate = (index["collision_count"] / dataset["nr"]) * 100.0
 
     if index["bucket_count"] == 0:
         overflow_rate = 0.0
     else:
-        # Taxa de overflow = buckets com overflow / total de buckets.
         overflow_rate = (len(index["overflow_bucket_indexes"]) / index["bucket_count"]) * 100.0
+
+    overflow_page_count = index["overflow_pages_created"]
 
     return {
         "record_count": dataset["nr"],
@@ -205,7 +168,7 @@ def build_index(index, dataset):
         "bucket_capacity": index["bucket_capacity"],
         "collision_count": index["collision_count"],
         "overflow_bucket_count": len(index["overflow_bucket_indexes"]),
-        "overflow_page_count": index["overflow_pages_created"],
+        "overflow_page_count": overflow_page_count,
         "build_seconds": build_time,
         "collision_rate": collision_rate,
         "overflow_rate": overflow_rate,
@@ -213,49 +176,34 @@ def build_index(index, dataset):
 
 
 def search_in_index(index, word, dataset):
-    # Esta funcao faz a busca pelo indice.
-    #
-    # Passos:
-    # 1. aplica a hash na palavra
-    # 2. vai ao bucket calculado
-    # 3. procura no bucket principal
-    # 4. se precisar, procura no overflow
-    # 5. pega a pagina encontrada
-    # 6. le a pagina para confirmar a palavra
+    # Busca por indice:
+    # 1) acha bucket pela hash
+    # 2) procura no primario
+    # 3) se precisar, procura no bucket overflow
+    # 4) confirma a palavra na pagina de dados
     bucket_number = index["hash_function"](word, index["bucket_count"])
     bucket = index["buckets"][bucket_number]
 
     start_time = perf_counter()
 
-    # Sempre lemos pelo menos 1 estrutura do indice:
-    # o bucket principal.
     bucket_pages_read = 1
-
-    # Conta quantas entradas foram comparadas.
     entries_checked = 0
-
-    # Aqui vamos guardar a pagina encontrada no indice.
     page_number = None
 
-    # Primeiro, olhamos o bucket principal.
     for item in bucket["primary"]:
         entries_checked += 1
         if item["key"] == word:
             page_number = item["page_number"]
             break
 
-    # Se nao achou no principal, percorremos as paginas de overflow.
     if page_number is None:
         for overflow_page in bucket["overflow"]:
-            # Cada pagina de overflow visitada conta como mais uma leitura.
             bucket_pages_read += 1
-
             for item in overflow_page:
                 entries_checked += 1
                 if item["key"] == word:
                     page_number = item["page_number"]
                     break
-
             if page_number is not None:
                 break
 
@@ -263,26 +211,19 @@ def search_in_index(index, word, dataset):
     found = False
     page_result = None
 
-    # Se o indice apontou uma pagina, lemos essa pagina de dados.
-    # Isso simula o acesso ao "disco" no trabalho.
     if page_number is not None:
         data_pages_read = 1
         page = get_page(dataset, page_number)
-
-        # Confirmamos se a palavra realmente esta nessa pagina.
         if word in page:
             found = True
             page_result = preview_page(dataset, page_number)
 
-    # Este bloco prepara uma copia simples do bucket para mostrar na interface.
     total_entries = len(bucket["primary"])
     overflow_copy = []
-
     for overflow_page in bucket["overflow"]:
         overflow_copy.append(list(overflow_page))
         total_entries += len(overflow_page)
 
-    # Medimos o tempo gasto so nesta busca.
     search_time = perf_counter() - start_time
 
     return {
@@ -292,7 +233,9 @@ def search_in_index(index, word, dataset):
         "bucket_index": bucket_number,
         "bucket_pages_read": bucket_pages_read,
         "data_pages_read": data_pages_read,
-        "total_page_reads": data_pages_read, # Corrigido: o custo total não considera a leitura nos buckets, somente na página
+        # Regra solicitada pelo professor:
+        # custo = apenas leitura da pagina de dados.
+        "total_page_reads": data_pages_read,
         "bucket_entries_examined": entries_checked,
         "elapsed_seconds": search_time,
         "bucket_snapshot": {

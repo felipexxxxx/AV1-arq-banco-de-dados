@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Projeto 1 - Indice Hash - Mapeamento de Funcoes</title>
+  <style>
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: #1f2937;
+      margin: 28px;
+      line-height: 1.45;
+      font-size: 12.5px;
+    }
+    h1, h2, h3 {
+      color: #0f172a;
+      margin-top: 22px;
+      margin-bottom: 8px;
+    }
+    h1 {
+      font-size: 24px;
+      border-bottom: 2px solid #e5e7eb;
+      padding-bottom: 6px;
+    }
+    h2 { font-size: 18px; }
+    h3 { font-size: 15px; }
+    p { margin: 6px 0; }
+    ul { margin: 6px 0 8px 18px; }
+    li { margin: 3px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 18px 0;
+      table-layout: fixed;
+    }
+    th, td {
+      border: 1px solid #d1d5db;
+      padding: 7px 8px;
+      vertical-align: top;
+      word-wrap: break-word;
+    }
+    th {
+      background: #f3f4f6;
+      text-align: left;
+    }
+    .ok {
+      color: #065f46;
+      font-weight: 700;
+    }
+    .part {
+      color: #92400e;
+      font-weight: 700;
+    }
+    .code {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 8px;
+      margin: 8px 0;
+      white-space: pre-wrap;
+      font-family: "Consolas", monospace;
+      font-size: 12px;
+    }
+    .small {
+      color: #6b7280;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Projeto 1 - Indice Hash<br>Mapa do codigo + explicacao detalhada</h1>
+  <p><b>Aluno:</b> Felipe<br>
+     <b>Data:</b> 08/03/2026</p>
+  <p>Este documento mostra exatamente <b>onde esta cada funcao</b> no codigo, o que ela faz, e como cada parte atende o PDF do trabalho.</p>
+
+  <h2>1) Alteracao da versao atual (NB ajustavel para reduzir overflow)</h2>
+  <p>A alteracao foi feita em <b>hash_index.py</b>, funcao <b>calculate_bucket_count</b> (linha 38), com controle pela GUI.</p>
+  <div class="code">Antes: NB = (NR // FR) + 1
+Agora: alvo por bucket = int(FR * fator) (minimo 1, fator entre 0 e 1)
+      NB = (NR // alvo) + 1</div>
+  <p>Exemplo pratico:</p>
+  <ul>
+    <li>Se NR = 466000 e FR = 4:</li>
+    <li>Fator 1.0: alvo=4, NB ~= 116501</li>
+    <li>Fator 0.6: alvo=2, NB ~= 233001</li>
+    <li>Fator 0.5: alvo=2, NB ~= 233001</li>
+  </ul>
+  <p class="small">Isso continua respeitando a regra do PDF: NB &gt; NR/FR.</p>
+
+  <h2>2) Estrutura de dados usada no projeto</h2>
+  <ul>
+    <li><b>Dados (tabela):</b> dicionario <code>dataset</code> com <code>records</code>, <code>pages</code>, <code>nr</code>, <code>page_count</code>.</li>
+    <li><b>Indice:</b> dicionario <code>index</code> com <code>bucket_count</code>, <code>bucket_capacity</code>, <code>buckets</code>, metricas.</li>
+    <li><b>Buckets:</b> lista com tamanho NB. Cada bucket tem:
+      <div class="code">{
+  "primary": [ {"key": palavra, "page_number": n}, ... ],
+  "overflow": [ [itens], [itens], ... ]
+}</div>
+    </li>
+    <li><b>Busca:</b> resultado de indice e scan sao dicionarios para a GUI mostrar custo, tempo e pagina.</li>
+  </ul>
+
+  <h2>3) Onde esta cada funcao (arquivo por arquivo)</h2>
+
+  <h3>3.1 data_pages.py</h3>
+  <table>
+    <tr><th>Funcao (linha)</th><th>O que faz</th><th>Exemplo rapido</th></tr>
+    <tr><td><b>load_words_from_txt</b> (4)</td><td>Le arquivo TXT, 1 palavra por linha, remove vazias e valida erro.</td><td>Entrada: words_alpha.txt -> Saida: lista com 466k strings.</td></tr>
+    <tr><td><b>create_dataset</b> (29)</td><td>Divide registros em paginas do tamanho escolhido e monta o dicionario principal.</td><td>Se page_size=3 e 10 palavras -> 4 paginas.</td></tr>
+    <tr><td><b>get_page</b> (63)</td><td>Retorna pagina pelo numero (1-based na interface).</td><td>get_page(dataset, 1) retorna primeira pagina.</td></tr>
+    <tr><td><b>preview_page</b> (73)</td><td>Cria resumo da pagina (numero, qtd registros, 5 primeiros).</td><td>Usada para mostrar primeira/ultima pagina na GUI.</td></tr>
+  </table>
+
+  <h3>3.2 hash_index.py</h3>
+  <table>
+    <tr><th>Funcao (linha)</th><th>O que faz</th><th>Exemplo rapido</th></tr>
+    <tr><td><b>available_hash_algorithms</b> (11)</td><td>Lista nomes de hash para o combobox.</td><td>["FNV-1a", "Polinomial"]</td></tr>
+    <tr><td><b>fnv1a_hash</b> (16)</td><td>Hash deterministica FNV-1a.</td><td>Mesma palavra -> mesmo bucket.</td></tr>
+    <tr><td><b>polynomial_hash</b> (30)</td><td>Hash polinomial deterministica.</td><td>Outra opcao de distribuicao.</td></tr>
+    <tr><td><b>calculate_bucket_count</b> (38)</td><td>Calcula NB automaticamente com fator ajustavel.</td><td>Fator 1.0 usa divisor FR; 0.6 usa 60% de FR.</td></tr>
+    <tr><td><b>validate_bucket_count</b> (60)</td><td>Valida regra NB &gt; NR/FR.</td><td>Retorna True/False.</td></tr>
+    <tr><td><b>create_hash_index</b> (66)</td><td>Cria estrutura vazia de indice e buckets.</td><td>NB buckets, cada um com area primaria + overflow.</td></tr>
+    <tr><td><b>build_index</b> (99)</td><td>Percorre paginas e registros, aplica hash e insere no bucket; trata colisao e overflow; mede tempo.</td><td>Se primario cheio, cria/usa bucket overflow.</td></tr>
+    <tr><td><b>search_in_index</b> (178)</td><td>Busca chave via hash, varre primario/overflow, confirma pagina de dados, devolve custo e tempo.</td><td>Resultado: achou?, pagina, bucket, leituras, snapshot do bucket.</td></tr>
+  </table>
+
+  <h3>3.3 metrics.py</h3>
+  <table>
+    <tr><th>Funcao (linha)</th><th>O que faz</th><th>Exemplo rapido</th></tr>
+    <tr><td><b>format_seconds</b> (6)</td><td>Formata tempo para ms/s na tela.</td><td>0.019 -> "19,000 ms (0,0190 s)".</td></tr>
+    <tr><td><b>table_scan</b> (16)</td><td>Busca sequencial pagina por pagina ate achar (ou terminar).</td><td>Conta paginas lidas e registros lidos.</td></tr>
+    <tr><td><b>compare_searches</b> (75)</td><td>Compara indice x scan para mesma palavra.</td><td>Delta tempo = scan - indice.</td></tr>
+  </table>
+
+  <h3>3.4 gui.py</h3>
+  <table>
+    <tr><th>Metodo (linha)</th><th>Papel no fluxo</th><th>Observacao</th></tr>
+    <tr><td><b>__init__</b> (41)</td><td>Inicializa estados e monta tela.</td><td>Carrega vars, chama render inicial.</td></tr>
+    <tr><td><b>_load_file</b> (390)</td><td>HU01: escolhe TXT, le arquivo, mostra total NR e trata erro.</td><td>CA01/CA02/CA03.</td></tr>
+    <tr><td><b>_build_index</b> (425)</td><td>HU02+HU03+HU04+HU05+HU06: valida page_size/FR/fator, pagina dados, calcula NB, cria indice e constroi.</td><td>Mede tempo de construcao.</td></tr>
+    <tr><td><b>_search_by_index</b> (484)</td><td>HU09: busca por indice com palavra digitada.</td><td>Mostra bucket, pagina, custo, tempo.</td></tr>
+    <tr><td><b>_run_table_scan</b> (505)</td><td>HU10: roda scan apenas ao clicar no botao.</td><td>Mostra custo e pagina encontrada.</td></tr>
+    <tr><td><b>_render_dataset_summary</b> (522)</td><td>Mostra metricas: NR, paginas, FR, fator NB, NB, colisoes, overflow, tempo.</td><td>HU12/HU13 + RNF02.</td></tr>
+    <tr><td><b>_render_page_summary</b> (579)</td><td>Mostra primeira e ultima pagina com preview.</td><td>HU03/CA07.</td></tr>
+    <tr><td><b>_render_index_result</b> (617)</td><td>Painel da busca por indice.</td><td>Inclui snapshot do bucket.</td></tr>
+    <tr><td><b>_render_scan_result</b> (665)</td><td>Painel do table scan.</td><td>Mostra paginas visitadas (amostra).</td></tr>
+    <tr><td><b>_render_comparison</b> (713)</td><td>HU11: compara tempo e custo entre indice e scan.</td><td>Delta scan - indice.</td></tr>
+    <tr><td><b>_format_bucket_snapshot</b> (757)</td><td>Mostra conteudo do bucket primario e buckets overflow.</td><td>Atende visualizacao de estrutura.</td></tr>
+    <tr><td><b>launch_app</b> (783)</td><td>Inicia aplicacao.</td><td>Chamado por main.py.</td></tr>
+  </table>
+
+  <h3>3.5 main.py</h3>
+  <table>
+    <tr><th>Funcao</th><th>Linha</th><th>Papel</th></tr>
+    <tr><td>Entrada do programa</td><td>1-4</td><td>Importa <code>launch_app()</code> e abre GUI.</td></tr>
+  </table>
+
+  <h2>4) Checklist do PDF (historia por historia)</h2>
+  <table>
+    <tr><th>HU</th><th>Status</th><th>Onde esta no codigo</th><th>Como funciona</th></tr>
+    <tr><td>HU01 - Carregar TXT</td><td><span class="ok">FEITO</span></td><td>gui.py:373 + data_pages.py:4</td><td>Usuario escolhe arquivo, sistema le palavras e mostra total.</td></tr>
+    <tr><td>HU02 - Definir tamanho de pagina</td><td><span class="ok">FEITO</span></td><td>gui.py:224, 419, 425 + data_pages.py:29</td><td>Campo na interface; valida >0.</td></tr>
+    <tr><td>HU03 - Dividir em paginas</td><td><span class="ok">FEITO</span></td><td>data_pages.py:29 + gui.py:554</td><td>Divide registros e mostra primeira/ultima pagina com 5 primeiros.</td></tr>
+    <tr><td>HU04 - Criar buckets</td><td><span class="ok">FEITO</span></td><td>hash_index.py:38, 58, 64 + gui.py:437-440</td><td>Calcula NB, valida regra e cria buckets com FR.</td></tr>
+    <tr><td>HU05 - Funcao hash configuravel</td><td><span class="ok">FEITO</span></td><td>hash_index.py:16, 30, 11 + gui.py:230-240</td><td>Escolha entre FNV-1a e Polinomial; ambas deterministicas.</td></tr>
+    <tr><td>HU06 - Construir indice percorrendo paginas</td><td><span class="ok">FEITO</span></td><td>hash_index.py:97-173</td><td>Percorre pagina por pagina e insere (chave, page_number).</td></tr>
+    <tr><td>HU07 - Resolver colisoes</td><td><span class="ok">FEITO</span></td><td>hash_index.py:121-126</td><td>Conta colisao somente quando primario esta cheio.</td></tr>
+    <tr><td>HU08 - Resolver overflow</td><td><span class="ok">FEITO</span></td><td>hash_index.py:127-144</td><td>Cria buckets overflow encadeados por bucket primario.</td></tr>
+    <tr><td>HU09 - Buscar por indice</td><td><span class="ok">FEITO</span></td><td>gui.py:460 + hash_index.py:176</td><td>Hash -> bucket -> overflow -> pagina -> confirmacao.</td></tr>
+    <tr><td>HU10 - Table scan</td><td><span class="ok">FEITO</span></td><td>gui.py:481 + metrics.py:16</td><td>Le pagina por pagina ate encontrar.</td></tr>
+    <tr><td>HU11 - Comparar tempo/custo</td><td><span class="ok">FEITO</span></td><td>metrics.py:75 + gui.py:688</td><td>Compara indice e scan para mesma palavra.</td></tr>
+    <tr><td>HU12 - Taxa de colisoes</td><td><span class="ok">FEITO</span></td><td>hash_index.py:150-154 + gui.py:547</td><td>Mostra percentual de colisoes.</td></tr>
+    <tr><td>HU13 - Taxa de overflow</td><td><span class="ok">FEITO</span></td><td>hash_index.py:155-159 + gui.py:550</td><td>Mostra percentual de buckets com overflow.</td></tr>
+    <tr><td>HU14 - Interface grafica e visualizacao</td><td><span class="ok">FEITO</span></td><td>gui.py (estrutura toda, classe HashIndexApp)</td><td>Mostra paginas, buckets, resultados e comparacao.</td></tr>
+  </table>
+
+  <h2>5) Exemplo pratico completo</h2>
+  <p><b>Cenario:</b> buscar "zwitterionic".</p>
+  <ul>
+    <li>1) Usuario digita palavra e clica <b>Buscar via Indice</b> (gui.py:265).</li>
+    <li>2) <code>search_in_index()</code> calcula bucket com hash (hash_index.py:182).</li>
+    <li>3) Procura no primario; se nao achar, entra em buckets overflow (hash_index.py:197).</li>
+    <li>4) Quando encontra, pega <code>page_number</code> e confirma na pagina real (hash_index.py:212-217).</li>
+    <li>5) GUI mostra: status, bucket, leituras, custo, tempo, pagina e conteudo do bucket (gui.py:592).</li>
+    <li>6) Se clicar <b>Table Scan</b>, o sistema le pagina 1,2,3... ate achar (metrics.py:16).</li>
+    <li>7) Painel comparacao mostra diferenca de tempo e custo (gui.py:688).</li>
+  </ul>
+
+  <h2>6) Pontos importantes para explicar ao professor</h2>
+  <ul>
+    <li>O projeto nao usa banco externo (MySQL/Postgres). E uma simulacao em memoria de paginas + indice hash estatico.</li>
+    <li>A hash e deterministica (nao usa <code>hash()</code> padrao do Python).</li>
+    <li>Overflow e separado de paginas de dados: pagina de dados guarda palavras; bucket overflow guarda pares chave->pagina.</li>
+    <li>Custo de indice foi ajustado para seguir orientacao: custo = leitura da pagina de dados.</li>
+    <li>Table scan so executa quando o botao e clicado.</li>
+  </ul>
+
+  <h2>7) Arquivos finais gerados</h2>
+  <ul>
+    <li><b>Codigo alterado:</b> hash_index.py (calculo de NB), README.md (documentacao da formula).</li>
+    <li><b>Documento:</b> este relatorio foi convertido para PDF.</li>
+  </ul>
+
+  <p class="small">Fim do documento.</p>
+</body>
+</html>
