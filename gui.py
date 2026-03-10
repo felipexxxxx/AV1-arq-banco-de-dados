@@ -276,15 +276,27 @@ class HashIndexApp(tk.Tk):
         )
 
         search_entry = ttk.Entry(inner, textvariable=self.search_var, font=FONT_MONO)
+        def enable_scan(*args):
+            if self.search_var.get().strip():
+                self.scan_button.config(state="normal")
+            else:
+                self.scan_button.config(state="disabled")
+
+        self.search_var.trace_add("write", enable_scan)
         search_entry.grid(row=0, column=1, sticky="ew", padx=(0, 8), pady=(8, 8))
         search_entry.bind("<Return>", lambda _e: self._search_by_index())
 
         ttk.Button(inner, text="Buscar via Indice", style="Search.TButton", command=self._search_by_index).grid(
             row=0, column=2, padx=(0, 8), pady=8
         )
-        ttk.Button(inner, text="Table Scan", style="Secondary.TButton", command=self._run_table_scan).grid(
-            row=0, column=3, padx=(0, 12), pady=8
+        self.scan_button = ttk.Button(
+            inner,
+            text="Table Scan",
+            style="Secondary.TButton",
+            command=self._run_table_scan,
+            state="disabled"
         )
+        self.scan_button.grid(row=0, column=3, padx=(0, 12), pady=8)
 
     def _build_top_panels(self, parent, row):
         container = tk.Frame(parent, bg=BG)
@@ -366,6 +378,7 @@ class HashIndexApp(tk.Tk):
         self._text_widgets[key] = text
 
     def _configure_tags(self, widget):
+        widget.tag_configure("highlight", background="#2d64c0")
         widget.tag_configure("accent", foreground=ACCENT)
         widget.tag_configure("accent2", foreground=ACCENT2)
         widget.tag_configure("success", foreground=SUCCESS)
@@ -406,6 +419,12 @@ class HashIndexApp(tk.Tk):
             return
 
         self.records = list(loaded_records)
+        try:
+            page_size = int(self.page_size_var.get())
+            self.dataset = create_dataset(self.records, page_size)
+        except:
+            self.dataset = None
+
         self.dataset = None
         self.index = None
         self.build_stats = None
@@ -631,7 +650,7 @@ class HashIndexApp(tk.Tk):
         r = self.last_index_result
         found = r["found"]
         status_tag = "success" if found else "danger"
-        status_txt = "ENCONTRADO" if found else "NAO ENCONTRADO"
+        status_txt = "ENCONTRADO" if found else "nao encontrada"
 
         seg = [
             ("Palavra  ", "dim"),
@@ -679,7 +698,7 @@ class HashIndexApp(tk.Tk):
         r = self.last_scan_result
         found = r["found"]
         status_tag = "success" if found else "danger"
-        status_txt = "ENCONTRADO" if found else "NAO ENCONTRADO"
+        status_txt = "ENCONTRADO" if found else "nao encontrada"
 
         visited = ", ".join(str(p) for p in r["visited_pages_preview"]) or "-"
         if r["preview_truncated"]:
@@ -707,6 +726,10 @@ class HashIndexApp(tk.Tk):
 
         if r["page_preview"] is not None:
             seg += self._page_preview_segments("Pagina Encontrada", r["page_preview"])
+        seg.append(("\n-- Registros lidos --\n", "dim"))
+
+        for r in r["records_list"]:
+            seg.append((f"{r}\n", None))
 
         self._set_rich("scan", seg)
 
@@ -744,6 +767,11 @@ class HashIndexApp(tk.Tk):
                 (f"{format_seconds(saved_t)}\n", t_tag),
                 ("Delta custo (scan - indice)  ", "dim"),
                 (f"{saved_p} leituras\n", p_tag),
+
+                ("\nEconomia de tempo (%)  ", "dim"),
+                (f"{comparison['time_percent']:.2f}%\n", "success"),
+                ("Economia de custo (%)  ", "dim"),
+                (f"{comparison['cost_percent']:.2f}%\n", "success"),
             ]
 
         if self.last_index_result is not None:
@@ -753,6 +781,7 @@ class HashIndexApp(tk.Tk):
             ]
 
         self._set_rich("compare", seg)
+        
 
     def _format_bucket_snapshot(self, snapshot):
         primary = self._format_entries(snapshot["primary_entries"])
